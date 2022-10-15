@@ -16,7 +16,7 @@ pico_sdk_init()
 add_executable(speedometer speedometer.c seven_segment.c)
 
 #Pull in our pico_stdlib which aggregates commonly used features
-target_link_libraries(speedometer pico_stdlib)
+target_link_libraries(speedometer pico_stdlib hardware_adc hardware_dma)
 
 #Enable USB output, disable UART output
 pico_enable_stdio_usb(speedometer 1)

@@ -6,6 +6,7 @@
 #include "pico/stdio.h"
 #include "pico/stdlib.h"
 #include "hardware/irq.h"
+#include "hardware/adc.h"
 
 #include "seven_segment.h"
 
@@ -58,31 +59,41 @@ void main(void)
     float j = 0.0;
     
     stdio_init_all();
+    adc_init();
     gpio_setting();
+    adc_gpio_init(PIN_IR_PT0);
+    adc_gpio_init(PIN_IR_PT1);
 
     sleep_ms(500);
 
+    // Start
+
     gpio_put(PIN_PONSIG, 1);
 
+    gpio_put(PIN_IR_LED0, 0);
+    gpio_put(PIN_IR_LED1, 1);
 
     hardware_alarm_set_callback(repeat_alarm_num, alarm_callback);
     prev_target = time_us_64() + 100000; // 開始だけ遅らせる
     hardware_alarm_set_target(repeat_alarm_num, prev_target);
 
+    adc_select_input(0);
 
     while (true) {
         gpio_put(PIN_LED, 1);
-        sleep_ms(250);
+        sleep_ms(100);
         if(gpio_get(PIN_PONSW) != 0)
         {
             gpio_put(PIN_LED, 0);
         }
-        sleep_ms(250);
+        sleep_ms(100);
 
         //SevenSegment_SetIntDec(&sevenSeg, i++);
-        SevenSegment_SetFloatDec(&sevenSeg, j, 2);
-
         j = j + 0.01;
+
+        uint16_t result = adc_read();
+        
+        SevenSegment_SetFloatDec(&sevenSeg, result/4096.0f, 3);
 
     }
 
