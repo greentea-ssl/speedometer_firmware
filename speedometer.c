@@ -5,6 +5,9 @@
 
 #include "pico/stdio.h"
 #include "pico/stdlib.h"
+#include "hardware/irq.h"
+
+#include "seven_segment.h"
 
 #define PIN_LED PICO_DEFAULT_LED_PIN
 
@@ -23,85 +26,104 @@
 #define PIN_DISP_CA2 (5)
 #define PIN_DISP_CA3 (8)
 
+#define PIN_IR_LED0 (14)
+#define PIN_IR_LED1 (15)
+#define PIN_IR_PT0 (27)
+#define PIN_IR_PT1 (26)
 
+
+void gpio_setting();
+
+
+uint repeat_alarm_num = 0;
+absolute_time_t prev_target;
+uint32_t period_us = 2000;
+
+SevenSegment_t sevenSeg;
+
+
+void alarm_callback(uint alarm_num)
+{
+    prev_target += (uint64_t)period_us;
+    hardware_alarm_set_target(repeat_alarm_num, prev_target);
+
+    SevenSegment_Update(&sevenSeg);
+
+}
 
 void main(void)
 {
-    gpio_init(PIN_LED);
-    gpio_init(PIN_PONSIG);
-    gpio_init(PIN_PONSW);
 
-    gpio_init(PIN_DISP_A);
-    gpio_init(PIN_DISP_B);
-    gpio_init(PIN_DISP_C);
-    gpio_init(PIN_DISP_D);
-    gpio_init(PIN_DISP_E);
-    gpio_init(PIN_DISP_F);
-    gpio_init(PIN_DISP_G);
-    gpio_init(PIN_DISP_DP);
-    gpio_init(PIN_DISP_CA1);
-    gpio_init(PIN_DISP_CA2);
-    gpio_init(PIN_DISP_CA3);
-
-    gpio_set_dir(PIN_LED, GPIO_OUT);
-    gpio_set_dir(PIN_PONSIG, GPIO_OUT);
-    gpio_set_dir(PIN_PONSW, GPIO_IN);
+    int i = 0;
+    float j = 0.0;
     
-    gpio_set_dir(PIN_DISP_A, GPIO_OUT);
-    gpio_set_dir(PIN_DISP_B, GPIO_OUT);
-    gpio_set_dir(PIN_DISP_C, GPIO_OUT);
-    gpio_set_dir(PIN_DISP_D, GPIO_OUT);
-    gpio_set_dir(PIN_DISP_E, GPIO_OUT);
-    gpio_set_dir(PIN_DISP_F, GPIO_OUT);
-    gpio_set_dir(PIN_DISP_G, GPIO_OUT);
-    gpio_set_dir(PIN_DISP_DP, GPIO_OUT);
-    gpio_set_dir(PIN_DISP_CA1, GPIO_OUT);
-    gpio_set_dir(PIN_DISP_CA2, GPIO_OUT);
-    gpio_set_dir(PIN_DISP_CA3, GPIO_OUT);
-
-    gpio_put(PIN_DISP_A, 1);
-    gpio_put(PIN_DISP_B, 1);
-    gpio_put(PIN_DISP_C, 0);
-    gpio_put(PIN_DISP_D, 0);
-    gpio_put(PIN_DISP_E, 0);
-    gpio_put(PIN_DISP_F, 0);
-    gpio_put(PIN_DISP_G, 0);
-    gpio_put(PIN_DISP_DP, 0);
-    gpio_put(PIN_DISP_CA1, 1);
-    gpio_put(PIN_DISP_CA2, 1);
-    gpio_put(PIN_DISP_CA3, 1);
+    stdio_init_all();
+    gpio_setting();
 
     sleep_ms(500);
 
     gpio_put(PIN_PONSIG, 1);
 
 
+    hardware_alarm_set_callback(repeat_alarm_num, alarm_callback);
+    prev_target = time_us_64() + 100000; // 開始だけ遅らせる
+    hardware_alarm_set_target(repeat_alarm_num, prev_target);
+
+
     while (true) {
-        // gpio_put(PIN_LED, 1);
-        // sleep_ms(100);
-        // if(gpio_get(PIN_PONSW) != 0)
-        // {
-        //     gpio_put(PIN_LED, 0);
-        // }
-        // sleep_ms(100);
+        gpio_put(PIN_LED, 1);
+        sleep_ms(250);
+        if(gpio_get(PIN_PONSW) != 0)
+        {
+            gpio_put(PIN_LED, 0);
+        }
+        sleep_ms(250);
 
-        gpio_put(PIN_DISP_CA1, 0);
-        gpio_put(PIN_DISP_CA2, 1);
-        gpio_put(PIN_DISP_CA3, 1);
-        sleep_ms(500);
+        //SevenSegment_SetIntDec(&sevenSeg, i++);
+        SevenSegment_SetFloatDec(&sevenSeg, j, 2);
 
-        gpio_put(PIN_DISP_CA1, 1);
-        gpio_put(PIN_DISP_CA2, 0);
-        gpio_put(PIN_DISP_CA3, 1);
-        sleep_ms(500);
-
-        gpio_put(PIN_DISP_CA1, 1);
-        gpio_put(PIN_DISP_CA2, 1);
-        gpio_put(PIN_DISP_CA3, 0);
-        sleep_ms(500);
-
-
+        j = j + 0.01;
 
     }
+
+}
+
+
+
+void gpio_setting()
+{
+    
+    gpio_init(PIN_LED);
+    gpio_set_dir(PIN_LED, GPIO_OUT);
+
+    gpio_init(PIN_PONSIG);
+    gpio_init(PIN_PONSW);
+    gpio_set_dir(PIN_PONSIG, GPIO_OUT);
+    gpio_set_dir(PIN_PONSW, GPIO_IN);
+
+    gpio_init(PIN_IR_LED0);
+    gpio_init(PIN_IR_LED1);
+    gpio_set_dir(PIN_IR_LED0, GPIO_OUT);
+    gpio_set_dir(PIN_IR_LED1, GPIO_OUT);
+    gpio_put(PIN_IR_LED0, 0);
+    gpio_put(PIN_IR_LED1, 0);
+
+    
+    SevenSegment_Init_t ssinit;
+    ssinit.pin_a = PIN_DISP_A;
+    ssinit.pin_b = PIN_DISP_B;
+    ssinit.pin_c = PIN_DISP_C;
+    ssinit.pin_d = PIN_DISP_D;
+    ssinit.pin_e = PIN_DISP_E;
+    ssinit.pin_f = PIN_DISP_F;
+    ssinit.pin_g = PIN_DISP_G;
+    ssinit.pin_dp = PIN_DISP_DP;
+    ssinit.pin_com[0] = PIN_DISP_CA1;
+    ssinit.pin_com[1] = PIN_DISP_CA2;
+    ssinit.pin_com[2] = PIN_DISP_CA3;
+    ssinit.dir_anode = 0;
+    ssinit.dir_cathode = 0;
+    ssinit.com_count = 3;
+    SevenSegment_Init(&sevenSeg, &ssinit);
 
 }
