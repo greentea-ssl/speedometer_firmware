@@ -25,6 +25,9 @@ typedef struct
 {
     uint16_t th_high[2];
     uint16_t th_low[2];
+
+    uint32_t timeout_threshold;
+
 }SpeedDetect_Init_t;
 
 typedef struct

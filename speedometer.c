@@ -69,9 +69,14 @@ void dma_handler(uint16_t* dma_buffer, uint32_t length)
 {
     SpeedDetect_UpdateResponse(&speedDetect, dma_buffer, length);
 
-    
-    SevenSegment_SetFloatDec(&sevenSeg, 22500.0f / speedDetect.mes_period_counter, 2);
-
+    if(speedDetect.mes_period_counter == 0)
+    {
+        SevenSegment_SetFloatDec(&sevenSeg, 0, 2);
+    }
+    else
+    {
+        SevenSegment_SetFloatDec(&sevenSeg, 22500.0f / speedDetect.mes_period_counter, 2);
+    }
 
 }
 

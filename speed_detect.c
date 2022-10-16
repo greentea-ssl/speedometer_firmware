@@ -10,6 +10,8 @@ void SpeedDetect_Init(SpeedDetect_t* h)
     h->init.th_low[0] = 100;
     h->init.th_low[1] = 100;
 
+    h->init.timeout_threshold = 45000;
+
     uint16_t init_val = 300;
 
     for(int ch = 0; ch < 2; ch++)
@@ -86,6 +88,12 @@ void SpeedDetect_UpdateResponse(SpeedDetect_t* h, uint16_t* buf, uint32_t length
 
             case MES_STATE_MEASURING:
             h->mes_period_counter++;
+            if(h->mes_period_counter >= init->timeout_threshold)
+            {
+                h->mes_period_counter = 0;
+                h->mes_state = MES_STATE_ENDING;
+                break;
+            }
             if(h->mes_start_ch == 0 && h->bin_state[1])
             {
                 h->mes_state = MES_STATE_ENDING;
