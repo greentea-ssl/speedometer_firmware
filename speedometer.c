@@ -44,12 +44,12 @@ uint32_t period_us = 2000;
 SevenSegment_t sevenSeg;
 
 
-#define CAPTURE_DEPTH 16
+#define CAPTURE_DEPTH 256
 uint8_t capture_buf_0[CAPTURE_DEPTH];
 uint8_t capture_buf_1[CAPTURE_DEPTH];
 
-uint dma_ch_0;
-bool dma_interrupted = false;
+uint dma_ch_0, dma_ch_1;
+int dma_interp_counter = 0;
 
 void alarm_callback(uint alarm_num)
 {
@@ -61,11 +61,24 @@ void alarm_callback(uint alarm_num)
 }
 
 
-void dma_handler()
+void dma_handler0()
 {
-    printf("Handler!\n");
-    dma_interrupted = true;
+    //printf("Handler!\n");
+    dma_interp_counter++;
+
+    dma_channel_set_write_addr(dma_ch_0, capture_buf_0, false);
+
     dma_channel_acknowledge_irq0(dma_ch_0);
+}
+
+void dma_handler1()
+{
+    //printf("Handler!\n");
+    dma_interp_counter++;
+    
+    dma_channel_set_write_addr(dma_ch_1, capture_buf_1, false);
+
+    dma_channel_acknowledge_irq1(dma_ch_1);
 }
 
 void main(void)
@@ -101,24 +114,37 @@ void main(void)
     adc_set_clkdiv(48000);
 
     dma_ch_0 = dma_claim_unused_channel(true);
-    dma_channel_config cfg = dma_channel_get_default_config(dma_ch_0);
-    channel_config_set_transfer_data_size(&cfg, DMA_SIZE_8);
-    channel_config_set_read_increment(&cfg, false);
-    channel_config_set_write_increment(&cfg, true);
-    // channel_config_set_irq_quiet(&cfg, true);
-    channel_config_set_dreq(&cfg, DREQ_ADC);
-    dma_channel_configure(dma_ch_0, &cfg, capture_buf_0, &adc_hw->fifo, CAPTURE_DEPTH, false);
-    dma_channel_set_irq0_enabled(dma_ch_0, true);
-    
-    irq_set_exclusive_handler(DMA_IRQ_0, dma_handler);
-    irq_set_enabled(DMA_IRQ_0, true);
+    dma_ch_1 = dma_claim_unused_channel(true);
 
+    dma_channel_config cfg_0 = dma_channel_get_default_config(dma_ch_0);
+    channel_config_set_transfer_data_size(&cfg_0, DMA_SIZE_8);
+    channel_config_set_read_increment(&cfg_0, false);
+    channel_config_set_write_increment(&cfg_0, true);
+    channel_config_set_dreq(&cfg_0, DREQ_ADC);
+    channel_config_set_chain_to(&cfg_0, dma_ch_1);
+    dma_channel_configure(dma_ch_0, &cfg_0, capture_buf_0, &adc_hw->fifo, CAPTURE_DEPTH, false);
+    dma_channel_set_irq0_enabled(dma_ch_0, true);
+
+    dma_channel_config cfg_1 = dma_channel_get_default_config(dma_ch_1);
+    channel_config_set_transfer_data_size(&cfg_1, DMA_SIZE_8);
+    channel_config_set_read_increment(&cfg_1, false);
+    channel_config_set_write_increment(&cfg_1, true);
+    channel_config_set_dreq(&cfg_1, DREQ_ADC);
+    channel_config_set_chain_to(&cfg_1, dma_ch_0);
+    dma_channel_configure(dma_ch_1, &cfg_1, capture_buf_1, &adc_hw->fifo, CAPTURE_DEPTH, false);
+    dma_channel_set_irq1_enabled(dma_ch_1, true);
+    
+    irq_set_exclusive_handler(DMA_IRQ_0, dma_handler0);
+    irq_set_enabled(DMA_IRQ_0, true);
+    
+    irq_set_exclusive_handler(DMA_IRQ_1, dma_handler1);
+    irq_set_enabled(DMA_IRQ_1, true);
 
     dma_channel_start(dma_ch_0);
 
     adc_run(true);
     
-    printf("Start.\n");
+    printf("Start. %d, %d\n", dma_ch_0, dma_ch_1);
 
     while (true) {
         // gpio_put(PIN_LED, 1);
@@ -136,25 +162,37 @@ void main(void)
         
         // SevenSegment_SetFloatDec(&sevenSeg, result/4096.0f, 3);
 
+        sleep_ms(10);
 
-
-        sleep_ms(100);
+        printf("[%6d]: ", dma_interp_counter);
 
         //for(int i = 0; i < CAPTURE_DEPTH; i++)
         //for(int i = 1024-32; i < 1024; i++)
 
-        // for(int i = 0; i < 64; i++)
-        // {
-        //     if((i & 0x07) == 0)
-        //         printf("|");
-        //     else
-        //         printf(" ");
+        for(int i = 0; i < 16; i++)
+        {
+            if((i & 0x07) == 0)
+                printf(" ");
+            else
+                printf(" ");
 
-        //     printf("%02x", capture_buf_0[i]);
-        // }
-        // printf("\n");
+            printf("%02x", capture_buf_0[i]);
+        }
+        
+        printf("  ||  ");
 
-        printf("%d, %d\n", dma_interrupted, dma_channel_get_irq0_status(dma_ch_0));
+        for(int i = 0; i < 16; i++)
+        {
+            if((i & 0x07) == 0)
+                printf(" ");
+            else
+                printf(" ");
+
+            printf("%02x", capture_buf_1[i]);
+        }
+        printf("\n");
+
+        //printf("%d, %d\n", dma_interrupted, dma_channel_get_irq0_status(dma_ch_0));
 
     }
 
