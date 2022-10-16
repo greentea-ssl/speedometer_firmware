@@ -148,3 +148,17 @@ void SevenSegment_SetFloatDec(SevenSegment_t* h, float val, int dp)
     }
 
 }
+
+
+void SevenSegment_Clear(SevenSegment_t* h)
+{
+    SevenSegment_Init_t* init = &h->init;
+
+    for(int i = 0; i < init->com_count; i++)
+    {
+        h->digit_bits[i] = 0x00;
+    }
+
+    SevenSegment_Update(h);
+
+}

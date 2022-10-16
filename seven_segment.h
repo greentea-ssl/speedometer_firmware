@@ -47,5 +47,7 @@ void SevenSegment_SetIntDec(SevenSegment_t* h, int val);
 void SevenSegment_SetFloatDec(SevenSegment_t* h, float val, int dp);
 
 
+void SevenSegment_Clear(SevenSegment_t* h);
+
 
 #endif /* _SEVEN_SEGMENT_H_ */

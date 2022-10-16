@@ -43,6 +43,8 @@ uint repeat_alarm_num = 0;
 absolute_time_t prev_target;
 uint32_t period_us = 2000;
 
+uint32_t poweroff_counter = 0;
+
 SevenSegment_t sevenSeg;
 SpeedDetect_t speedDetect;
 
@@ -68,6 +70,20 @@ void alarm_callback(uint alarm_num)
 void dma_handler(uint16_t* dma_buffer, uint32_t length)
 {
     SpeedDetect_UpdateResponse(&speedDetect, dma_buffer, length);
+
+    // Power Off control
+    if(gpio_get(PIN_PONSW) == 0) poweroff_counter++;
+    else poweroff_counter = 0;
+    if(poweroff_counter > 500000 / period_us)
+    {
+        gpio_put(PIN_PONSIG, 0);
+        adc_run(false);
+        irq_set_enabled(TIMER_IRQ_0 + repeat_alarm_num, false);
+        gpio_put(PIN_LED, 0);
+        SevenSegment_Clear(&sevenSeg);
+        return;
+    }
+
 
     if(speedDetect.mes_period_counter == 0)
     {
@@ -111,7 +127,7 @@ void main(void)
     adc_gpio_init(PIN_IR_PT1);
     adc_init();
 
-    sleep_ms(500);
+    sleep_ms(1000);
 
     // Start
 
@@ -173,13 +189,11 @@ void main(void)
     printf("Start. %d, %d\n", dma_ch_0, dma_ch_1);
     
     SevenSegment_SetFloatDec(&sevenSeg, 0, 2);
-
+    
+    gpio_put(PIN_LED, 1);
+    
     while (true) {
-        gpio_put(PIN_LED, 1);
         sleep_ms(100);
-
-        sleep_ms(10);
-
 
         printf("state:%d, counter:%10d, speed:%fm/s\n", speedDetect.mes_state, speedDetect.mes_period_counter, 22500.0f / speedDetect.mes_period_counter);
 
