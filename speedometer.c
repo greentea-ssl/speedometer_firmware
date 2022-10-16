@@ -10,6 +10,7 @@
 #include "hardware/dma.h"
 
 #include "seven_segment.h"
+#include "speed_detect.h"
 
 #define PIN_LED PICO_DEFAULT_LED_PIN
 
@@ -42,14 +43,16 @@ absolute_time_t prev_target;
 uint32_t period_us = 2000;
 
 SevenSegment_t sevenSeg;
+SpeedDetect_t speedDetect;
 
 
-#define CAPTURE_DEPTH 256
-uint8_t capture_buf_0[CAPTURE_DEPTH];
-uint8_t capture_buf_1[CAPTURE_DEPTH];
+#define CAPTURE_DEPTH 2048
+uint16_t capture_buf_0[CAPTURE_DEPTH] __attribute__((aligned(2048)));
+uint16_t capture_buf_1[CAPTURE_DEPTH] __attribute__((aligned(2048)));
 
 uint dma_ch_0, dma_ch_1;
-int dma_interp_counter = 0;
+
+
 
 void alarm_callback(uint alarm_num)
 {
@@ -61,22 +64,31 @@ void alarm_callback(uint alarm_num)
 }
 
 
-void dma_handler0()
+void dma_handler(uint16_t* dma_buffer, uint32_t length)
 {
-    //printf("Handler!\n");
-    dma_interp_counter++;
+    SpeedDetect_UpdateResponse(&speedDetect, dma_buffer, length);
+
+    
+    SevenSegment_SetFloatDec(&sevenSeg, 22500.0f / speedDetect.mes_period_counter, 2);
+
+
+}
+
+
+void dma_handler_ch0()
+{
 
     dma_channel_set_write_addr(dma_ch_0, capture_buf_0, false);
+    dma_handler(capture_buf_0, CAPTURE_DEPTH);
 
     dma_channel_acknowledge_irq0(dma_ch_0);
 }
 
-void dma_handler1()
+void dma_handler_ch1()
 {
-    //printf("Handler!\n");
-    dma_interp_counter++;
     
     dma_channel_set_write_addr(dma_ch_1, capture_buf_1, false);
+    dma_handler(capture_buf_1, CAPTURE_DEPTH);
 
     dma_channel_acknowledge_irq1(dma_ch_1);
 }
@@ -88,18 +100,20 @@ void main(void)
     float j = 0.0;
     
     stdio_init_all();
-    adc_init();
     gpio_setting();
     adc_gpio_init(PIN_IR_PT0);
     adc_gpio_init(PIN_IR_PT1);
+    adc_init();
 
-    sleep_ms(2000);
+    sleep_ms(500);
 
     // Start
 
     gpio_put(PIN_PONSIG, 1);
 
-    gpio_put(PIN_IR_LED0, 0);
+    SpeedDetect_Init(&speedDetect);
+
+    gpio_put(PIN_IR_LED0, 1);
     gpio_put(PIN_IR_LED1, 1);
 
     hardware_alarm_set_callback(repeat_alarm_num, alarm_callback);
@@ -107,37 +121,40 @@ void main(void)
     hardware_alarm_set_target(repeat_alarm_num, prev_target);
 
     adc_select_input(0);
-
-    adc_fifo_setup(true, true, 1, false, true);
+    adc_set_round_robin(0b00011);
+    adc_fifo_setup(true, true, 1, true, false);
 
     // main clock: 48MHz
-    adc_set_clkdiv(48000);
+    //adc_set_clkdiv(480000);
+    adc_set_clkdiv(0);
 
     dma_ch_0 = dma_claim_unused_channel(true);
     dma_ch_1 = dma_claim_unused_channel(true);
 
     dma_channel_config cfg_0 = dma_channel_get_default_config(dma_ch_0);
-    channel_config_set_transfer_data_size(&cfg_0, DMA_SIZE_8);
+    channel_config_set_transfer_data_size(&cfg_0, DMA_SIZE_16);
     channel_config_set_read_increment(&cfg_0, false);
     channel_config_set_write_increment(&cfg_0, true);
     channel_config_set_dreq(&cfg_0, DREQ_ADC);
     channel_config_set_chain_to(&cfg_0, dma_ch_1);
+    // channel_config_set_ring(&cfg_0, true, 4);
     dma_channel_configure(dma_ch_0, &cfg_0, capture_buf_0, &adc_hw->fifo, CAPTURE_DEPTH, false);
     dma_channel_set_irq0_enabled(dma_ch_0, true);
 
     dma_channel_config cfg_1 = dma_channel_get_default_config(dma_ch_1);
-    channel_config_set_transfer_data_size(&cfg_1, DMA_SIZE_8);
+    channel_config_set_transfer_data_size(&cfg_1, DMA_SIZE_16);
     channel_config_set_read_increment(&cfg_1, false);
     channel_config_set_write_increment(&cfg_1, true);
     channel_config_set_dreq(&cfg_1, DREQ_ADC);
     channel_config_set_chain_to(&cfg_1, dma_ch_0);
+    // channel_config_set_ring(&cfg_1, true, 4);
     dma_channel_configure(dma_ch_1, &cfg_1, capture_buf_1, &adc_hw->fifo, CAPTURE_DEPTH, false);
     dma_channel_set_irq1_enabled(dma_ch_1, true);
     
-    irq_set_exclusive_handler(DMA_IRQ_0, dma_handler0);
+    irq_set_exclusive_handler(DMA_IRQ_0, dma_handler_ch0);
     irq_set_enabled(DMA_IRQ_0, true);
     
-    irq_set_exclusive_handler(DMA_IRQ_1, dma_handler1);
+    irq_set_exclusive_handler(DMA_IRQ_1, dma_handler_ch1);
     irq_set_enabled(DMA_IRQ_1, true);
 
     dma_channel_start(dma_ch_0);
@@ -145,6 +162,7 @@ void main(void)
     adc_run(true);
     
     printf("Start. %d, %d\n", dma_ch_0, dma_ch_1);
+    
 
     while (true) {
         // gpio_put(PIN_LED, 1);
@@ -164,35 +182,34 @@ void main(void)
 
         sleep_ms(10);
 
-        printf("[%6d]: ", dma_interp_counter);
-
         //for(int i = 0; i < CAPTURE_DEPTH; i++)
         //for(int i = 1024-32; i < 1024; i++)
 
-        for(int i = 0; i < 16; i++)
-        {
-            if((i & 0x07) == 0)
-                printf(" ");
-            else
-                printf(" ");
+        // for(int i = 0; i < 16; i++)
+        // {
+        //     if((i & 0x07) == 0)
+        //         printf(" ");
+        //     else
+        //         printf(" ");
 
-            printf("%02x", capture_buf_0[i]);
-        }
-        
-        printf("  ||  ");
+        //     printf("%04x", capture_buf_0[i]);
+        // }
+        // printf("  ||  ");
+        // for(int i = 0; i < 16; i++)
+        // {
+        //     if((i & 0x07) == 0)
+        //         printf(" ");
+        //     else
+        //         printf(" ");
 
-        for(int i = 0; i < 16; i++)
-        {
-            if((i & 0x07) == 0)
-                printf(" ");
-            else
-                printf(" ");
-
-            printf("%02x", capture_buf_1[i]);
-        }
-        printf("\n");
+        //     printf("%04x", capture_buf_1[i]);
+        // }
+        // printf("\n");
 
         //printf("%d, %d\n", dma_interrupted, dma_channel_get_irq0_status(dma_ch_0));
+
+
+        printf("state:%d, counter:%10d, speed:%fm/s\n", speedDetect.mes_state, speedDetect.mes_period_counter, 22500.0f / speedDetect.mes_period_counter);
 
     }
 
