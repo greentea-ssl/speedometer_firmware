@@ -45,7 +45,7 @@ void SpeedDetect_UpdateResponse(SpeedDetect_t* h, uint16_t* buf, uint32_t length
             h->maf_buf[ch][h->maf_buf_cursor] = u[ch];
             y[ch] = h->maf_sum[ch] >> MAF_DIV_SHIFT;
             
-            #if 0
+            #if 0 // 物理Highレベルで検出か?
             if(h->bin_state[ch] && y[ch] < init->th_low)
             {
                 h->bin_state[ch] = false;

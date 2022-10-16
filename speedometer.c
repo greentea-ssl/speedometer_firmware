@@ -8,6 +8,7 @@
 #include "hardware/irq.h"
 #include "hardware/adc.h"
 #include "hardware/dma.h"
+#include "hardware/timer.h"
 
 #include "seven_segment.h"
 #include "speed_detect.h"
@@ -117,6 +118,7 @@ void main(void)
     gpio_put(PIN_IR_LED1, 1);
 
     hardware_alarm_set_callback(repeat_alarm_num, alarm_callback);
+    irq_set_priority(TIMER_IRQ_0 + repeat_alarm_num, 0x10);
     prev_target = time_us_64() + 100000; // 開始だけ遅らせる
     hardware_alarm_set_target(repeat_alarm_num, prev_target);
 
@@ -152,10 +154,12 @@ void main(void)
     dma_channel_set_irq1_enabled(dma_ch_1, true);
     
     irq_set_exclusive_handler(DMA_IRQ_0, dma_handler_ch0);
+    irq_set_priority(DMA_IRQ_0, 0x81);
     irq_set_enabled(DMA_IRQ_0, true);
     
     irq_set_exclusive_handler(DMA_IRQ_1, dma_handler_ch1);
     irq_set_enabled(DMA_IRQ_1, true);
+    irq_set_priority(DMA_IRQ_1, 0x81);
 
     dma_channel_start(dma_ch_0);
 
@@ -163,50 +167,13 @@ void main(void)
     
     printf("Start. %d, %d\n", dma_ch_0, dma_ch_1);
     
+    SevenSegment_SetFloatDec(&sevenSeg, 0, 2);
 
     while (true) {
-        // gpio_put(PIN_LED, 1);
-        // sleep_ms(100);
-        // if(gpio_get(PIN_PONSW) != 0)
-        // {
-        //     gpio_put(PIN_LED, 0);
-        // }
-        // sleep_ms(100);
-
-        // //SevenSegment_SetIntDec(&sevenSeg, i++);
-        // j = j + 0.01;
-
-        // uint16_t result = adc_read();
-        
-        // SevenSegment_SetFloatDec(&sevenSeg, result/4096.0f, 3);
+        gpio_put(PIN_LED, 1);
+        sleep_ms(100);
 
         sleep_ms(10);
-
-        //for(int i = 0; i < CAPTURE_DEPTH; i++)
-        //for(int i = 1024-32; i < 1024; i++)
-
-        // for(int i = 0; i < 16; i++)
-        // {
-        //     if((i & 0x07) == 0)
-        //         printf(" ");
-        //     else
-        //         printf(" ");
-
-        //     printf("%04x", capture_buf_0[i]);
-        // }
-        // printf("  ||  ");
-        // for(int i = 0; i < 16; i++)
-        // {
-        //     if((i & 0x07) == 0)
-        //         printf(" ");
-        //     else
-        //         printf(" ");
-
-        //     printf("%04x", capture_buf_1[i]);
-        // }
-        // printf("\n");
-
-        //printf("%d, %d\n", dma_interrupted, dma_channel_get_irq0_status(dma_ch_0));
 
 
         printf("state:%d, counter:%10d, speed:%fm/s\n", speedDetect.mes_state, speedDetect.mes_period_counter, 22500.0f / speedDetect.mes_period_counter);
