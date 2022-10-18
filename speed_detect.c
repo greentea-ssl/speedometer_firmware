@@ -26,6 +26,8 @@ void SpeedDetect_Init(SpeedDetect_t* h)
 
     h->bin_state[0] = false;
     h->bin_state[1] = false;
+
+    h->mes_state = MES_STATE_STANDBY;
     
 }
 

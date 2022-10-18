@@ -49,10 +49,12 @@ absolute_time_t prev_target;
 uint32_t period_us = 2000;
 
 uint32_t poweroff_counter = 0;
-bool shutdown_flg = false;
 
 SevenSegment_t sevenSeg;
+
 SpeedDetect_t speedDetect;
+MeasureState_e prev_mes_state = MES_STATE_STANDBY;
+
 Buzzer_t buzzer;
 
 #define CAPTURE_DEPTH 2048
@@ -62,13 +64,29 @@ uint16_t capture_buf_1[CAPTURE_DEPTH] __attribute__((aligned(2048)));
 uint dma_ch_0, dma_ch_1;
 
 
-
 void alarm_callback(uint alarm_num)
 {
     prev_target += (uint64_t)period_us;
     hardware_alarm_set_target(repeat_alarm_num, prev_target);
 
     SevenSegment_Update(&sevenSeg);
+
+    Buzzer_Update(&buzzer, period_us);
+
+    // Power Off control
+    if(gpio_get(PIN_PONSW) == 0) poweroff_counter++;
+    else poweroff_counter = 0;
+    if(poweroff_counter == 1000000 / period_us)
+    {
+        gpio_put(PIN_PONSIG, 0);
+        adc_run(false);
+        irq_set_enabled(DMA_IRQ_0, false);
+        irq_set_enabled(DMA_IRQ_1, false);
+        gpio_put(PIN_LED, 0);
+        SevenSegment_Clear(&sevenSeg); 
+        Buzzer_SetSound_ShutDown(&buzzer);
+        return;
+    }
 
 }
 
@@ -77,21 +95,14 @@ void dma_handler(uint16_t* dma_buffer, uint32_t length)
 {
     SpeedDetect_UpdateResponse(&speedDetect, dma_buffer, length);
 
-    // Power Off control
-    if(gpio_get(PIN_PONSW) == 0) poweroff_counter++;
-    else poweroff_counter = 0;
-    if(poweroff_counter > 500000 / period_us)
+    if(
+        speedDetect.mes_state == MES_STATE_MEASURING && prev_mes_state == MES_STATE_STANDBY || 
+        speedDetect.mes_state == MES_STATE_ENDING && prev_mes_state == MES_STATE_MEASURING ||
+        speedDetect.mes_state == MES_STATE_STANDBY && prev_mes_state == MES_STATE_MEASURING)
     {
-        gpio_put(PIN_PONSIG, 0);
-        adc_run(false);
-        irq_set_enabled(TIMER_IRQ_0 + repeat_alarm_num, false);
-        gpio_put(PIN_LED, 0);
-        SevenSegment_Clear(&sevenSeg);
-        pwm_set_enabled(pwm_gpio_to_slice_num(PIN_BUZZER), false);
-        shutdown_flg = true;
-        return;
+        Buzzer_SetNote(&buzzer, 78+12, 50);
     }
-
+    prev_mes_state = speedDetect.mes_state;
 
     if(speedDetect.mes_period_counter == 0)
     {
@@ -126,7 +137,7 @@ void dma_handler_ch1()
 void main(void)
 {
 
-    sleep_ms(500);
+    sleep_ms(1000);
 
     // Start
     
@@ -137,39 +148,30 @@ void main(void)
 
     gpio_put(PIN_PONSIG, 1);
 
-    SpeedDetect_Init(&speedDetect);
-
     gpio_put(PIN_IR_LED0, 1);
     gpio_put(PIN_IR_LED1, 1);
+
+    SpeedDetect_Init(&speedDetect);
 
     hardware_alarm_set_callback(repeat_alarm_num, alarm_callback);
     irq_set_priority(TIMER_IRQ_0 + repeat_alarm_num, 0x10);
     prev_target = time_us_64() + 100000; // 開始だけ遅らせる
     hardware_alarm_set_target(repeat_alarm_num, prev_target);
 
-    
-    printf("Start. %d, %d\n", dma_ch_0, dma_ch_1);
-    
     SevenSegment_SetFloatDec(&sevenSeg, 0, 2);
 
     Buzzer_Init(&buzzer, PIN_BUZZER);
     
     gpio_put(PIN_LED, 1);
+
+    Buzzer_SetSound_StartUp(&buzzer);
     
     while (true) {
 
-        if(shutdown_flg)
-        {
-            Buzzer_Sound_ShutDown(&buzzer);
-            break;
-        }
-
-        //sleep_ms(100);
-        //printf("state:%d, counter:%10d, speed:%fm/s\n", speedDetect.mes_state, speedDetect.mes_period_counter, 22500.0f / speedDetect.mes_period_counter);
+        sleep_ms(100);
+        printf("state:%d, counter:%10d, speed:%fm/s\n", speedDetect.mes_state, speedDetect.mes_period_counter, 22500.0f / speedDetect.mes_period_counter);
 
     }
-
-    while(1){sleep_ms(100);}
 
 }
 

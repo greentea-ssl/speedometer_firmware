@@ -57,6 +57,55 @@ void Buzzer_CalcTable(Buzzer_t* h)
 }
 
 
+void Buzzer_InitQueue(Buzzer_t* h)
+{
+    Buzzer_NotesQueue_t* queue = &h->queue;
+
+    queue->head = 0;
+    queue->tail = 0;
+    queue->count = 0;
+    queue->max = NOTESBUF_LEN;
+}
+
+
+int Buzzer_Enque(Buzzer_t* h, uint8_t note, uint32_t period_us)
+{
+    Buzzer_NotesQueue_t* queue = &h->queue;
+
+    if(queue->count >= queue->max)
+    {
+        return -1;
+    }
+    else
+    {
+        queue->note[queue->head & NOTESBUF_MASK] = note;
+        queue->period_us[queue->head & NOTESBUF_MASK] = period_us;
+        queue->head++;
+        queue->count++;
+    }
+    return 0;
+}
+
+int Buzzer_Deque(Buzzer_t* h, uint8_t* note, uint32_t* period_us)
+{
+    Buzzer_NotesQueue_t* queue = &h->queue;
+
+    if(queue->count <= 0)
+    {
+        return -1;
+    }
+    else
+    {
+        *note = queue->note[queue->tail & NOTESBUF_MASK];
+        *period_us = queue->period_us[queue->tail & NOTESBUF_MASK];
+        queue->tail++;
+        queue->count--;
+    }
+    return 0;
+}
+
+
+
 void Buzzer_Init(Buzzer_t* h, uint gpio)
 {
     Buzzer_Init_t* init = &h->init;
@@ -74,13 +123,27 @@ void Buzzer_Init(Buzzer_t* h, uint gpio)
     pwm_set_chan_level(init->slice_num, init->channel, 0);
     pwm_set_enabled(init->slice_num, true);
 
-    Buzzer_Sound_StartUp(h);
+    Buzzer_InitQueue(h);
+
+    h->playing = false;
+    h->period_timer_us = 0;
+
+    // Buzzer_Sound_StartUp(h);
 
 }
 
+void Buzzer_NoteOff(Buzzer_t* h)
+{
+    pwm_set_enabled(h->init.slice_num, false);
+}
 
 void Buzzer_NoteOn(Buzzer_t* h, uint8_t note)
 {
+    if(note == 128)
+    {
+        Buzzer_NoteOff(h);
+        return;
+    }
     uint8_t div_i = table_div_x16[note] >> 4;
     uint8_t div_f = table_div_x16[note] & 0x0F;
     pwm_set_clkdiv_int_frac(h->init.slice_num, div_i, div_f);
@@ -89,31 +152,56 @@ void Buzzer_NoteOn(Buzzer_t* h, uint8_t note)
     pwm_set_enabled(h->init.slice_num, true);
 }
 
-void Buzzer_NoteOff(Buzzer_t* h)
+
+void Buzzer_Update(Buzzer_t* h, uint32_t cycleTime_us)
 {
-    pwm_set_enabled(h->init.slice_num, false);
+
+    if(h->playing)
+    {
+        h->period_timer_us += cycleTime_us;
+        if(h->period_timer_us >= h->current_period_us)
+        {
+            // Update note
+            if(Buzzer_Deque(h, &h->current_note, &h->current_period_us) == 0)
+            {
+                h->period_timer_us = 0;
+                Buzzer_NoteOn(h, h->current_note);
+            }
+            else
+            {
+                Buzzer_NoteOff(h);
+                h->playing =  false;
+            }
+        }
+    }
+    else
+    {
+        if(Buzzer_Deque(h, &h->current_note, &h->current_period_us) == 0)
+        {
+            h->period_timer_us = 0;
+            h->playing = true;
+            Buzzer_NoteOn(h, h->current_note);
+        }
+    }
+    
 }
 
-
-void Buzzer_SingleTone(Buzzer_t* h, uint8_t note, uint32_t period_ms)
+void Buzzer_SetNote(Buzzer_t* h, uint8_t note, uint32_t period_ms)
 {
-    Buzzer_NoteOn(h, note);
-    sleep_ms(period_ms);
-    Buzzer_NoteOff(h);
+    Buzzer_Enque(h, note, period_ms * 1000);
 }
 
-void Buzzer_Sound_StartUp(Buzzer_t* h)
+void Buzzer_SetSound_StartUp(Buzzer_t* h)
 {
-    Buzzer_SingleTone(h, 72 + 12, 100);
-    Buzzer_SingleTone(h, 74 + 12, 100);
-    Buzzer_SingleTone(h, 76 + 12, 100);
+    Buzzer_SetNote(h, 72+12, 100);
+    Buzzer_SetNote(h, 74+12, 100);
+    Buzzer_SetNote(h, 76+12, 100);
 }
 
-
-void Buzzer_Sound_ShutDown(Buzzer_t* h)
+void Buzzer_SetSound_ShutDown(Buzzer_t* h)
 {
-    Buzzer_SingleTone(h, 76 + 12, 100);
-    Buzzer_SingleTone(h, 74 + 12, 100);
-    Buzzer_SingleTone(h, 72 + 12, 100);
+    Buzzer_SetNote(h, 76+12, 100);
+    Buzzer_SetNote(h, 74+12, 100);
+    Buzzer_SetNote(h, 72+12, 100);
 }
 
