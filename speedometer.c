@@ -110,7 +110,16 @@ void dma_handler(uint16_t* dma_buffer, uint32_t length)
     }
     else
     {
-        SevenSegment_SetFloatDec(&sevenSeg, 22500.0f / speedDetect.mes_period_counter, 2);
+        float speed = 22500.0f / speedDetect.mes_period_counter;
+        if(speed < 10.0f)
+        {
+            SevenSegment_SetFloatDec(&sevenSeg, speed, 2);
+        }
+        else
+        {
+            SevenSegment_SetFloatDec(&sevenSeg, speed, 1);
+        }
+
     }
 
 }
