@@ -13,10 +13,10 @@ set(CMAKE_CXX_STANDARD 17)
 pico_sdk_init()
 
 #Add an executable target to be build from the source files
-add_executable(speedometer speedometer.c seven_segment.c speed_detect.c)
+add_executable(speedometer speedometer.c seven_segment.c speed_detect.c buzzer.c)
 
 #Pull in our pico_stdlib which aggregates commonly used features
-target_link_libraries(speedometer pico_stdlib hardware_adc hardware_dma)
+target_link_libraries(speedometer pico_stdlib hardware_adc hardware_dma hardware_pwm)
 
 #Enable USB output, disable UART output
 pico_enable_stdio_usb(speedometer 1)

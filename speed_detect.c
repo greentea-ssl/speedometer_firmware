@@ -10,7 +10,7 @@ void SpeedDetect_Init(SpeedDetect_t* h)
     h->init.th_low[0] = 100;
     h->init.th_low[1] = 100;
 
-    h->init.timeout_threshold = 45000;
+    h->init.timeout_threshold = 112500; // 0.09[m] / lowspeed[m/s] * 250E+6[Hz]
 
     uint16_t init_val = 300;
 
