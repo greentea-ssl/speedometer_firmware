@@ -8,7 +8,7 @@
 #include "hardware/irq.h"
 #include "hardware/adc.h"
 #include "hardware/dma.h"
-#include "hardware/timer.h""
+#include "hardware/timer.h"
 #include "hardware/pwm.h"
 
 #include "seven_segment.h"
